@@ -1,0 +1,427 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>World indicators</title>
+<meta name="description" content="Interactive choropleth world map with a metric switcher, tooltips, pan and zoom, and a country detail panel.">
+<link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#f7f8fa;--ink:#14202b;--mute:#5f6c79;--line:#dde2e8;--ocean:#e3ecf2;--nodata:#cdd4db;--stroke:#fff;--chip:#eceff3;--tipbg:#14202b;--tipink:#fff;--sel:#14202b;color-scheme:light dark;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0e1317;--ink:#e9eef3;--mute:#93a0ad;--line:#25303a;--ocean:#131b22;--nodata:#2a343e;--stroke:#0e1317;--chip:#1a232b;--tipbg:#e9eef3;--tipink:#14202b;--sel:#fff}}
+:root[data-theme="dark"]{--bg:#0e1317;--ink:#e9eef3;--mute:#93a0ad;--line:#25303a;--ocean:#131b22;--nodata:#2a343e;--stroke:#0e1317;--chip:#1a232b;--tipbg:#e9eef3;--tipink:#14202b;--sel:#fff}
+*{box-sizing:border-box}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.45 "Bricolage Grotesque",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;-webkit-font-smoothing:antialiased}
+.app{max-width:1200px;margin:0 auto;padding:20px 16px 28px}
+h1{font-size:26px;line-height:1.1;margin:0 0 4px;letter-spacing:-.02em}
+.sub,.mute{color:var(--mute)}
+.sub{margin:0 0 16px;font-size:13.5px}
+.tabs{display:flex;gap:22px;overflow-x:auto;scrollbar-width:none;border-bottom:1px solid var(--line);margin-bottom:16px}
+.tabs::-webkit-scrollbar{display:none}
+.tab{all:unset;flex:none;cursor:pointer;white-space:nowrap;padding:8px 0 10px;margin-bottom:-1px;color:var(--mute);font-weight:600;font-size:14px;border-bottom:3px solid transparent;transition:color .2s,border-color .3s}
+.tab:hover{color:var(--ink)}
+.tab[aria-selected=true]{color:var(--ink);border-bottom-color:var(--c)}
+.stage{display:grid;gap:16px}
+@media(min-width:900px){.stage{grid-template-columns:minmax(0,1fr) 320px;gap:24px;align-items:start}.panel{border-left:1px solid var(--line);padding-left:24px}}
+.map-wrap{position:relative;aspect-ratio:960/430;overflow:hidden;border-radius:10px;background:var(--ocean)}
+#map{width:100%;height:100%;display:block;cursor:grab}
+#map:active{cursor:grabbing}
+.ocean{fill:var(--ocean)}
+.cs path{fill:var(--nodata);stroke:var(--stroke);stroke-width:.5;vector-effect:non-scaling-stroke;cursor:pointer;transition:fill .55s ease,opacity .25s}
+.cs path.dim{opacity:.18}
+.hov,.selp{fill:none;stroke:var(--sel);vector-effect:non-scaling-stroke;pointer-events:none}
+.hov{stroke-width:1.2;opacity:.65}
+.selp{stroke-width:2.4}
+.zoom{position:absolute;right:10px;top:10px;display:grid;border-radius:9px;overflow:hidden;background:var(--bg);box-shadow:0 1px 6px #0003}
+.zoom button{all:unset;width:34px;height:34px;display:grid;place-items:center;cursor:pointer;font-size:18px}
+.zoom button+button{border-top:1px solid var(--line)}
+.zoom button:hover,.row:hover,.li:hover{background:var(--chip)}
+.zoom button:focus-visible,.row:focus-visible,.li:focus-visible,.btn:focus-visible,.lg button:focus-visible,.tab:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
+.tip{position:absolute;left:0;top:0;z-index:5;pointer-events:none;background:var(--tipbg);color:var(--tipink);padding:8px 11px;border-radius:8px;font-size:12.5px;line-height:1.4;white-space:nowrap;box-shadow:0 6px 18px #0004;opacity:0;transition:opacity .12s}
+.tip.show{opacity:1}
+.tip b{display:block;font-size:13.5px}
+.tip span{display:flex;align-items:center;gap:7px;margin-top:2px}
+.tip i{width:10px;height:10px;border-radius:3px;flex:none}
+.tip em{font-style:normal;opacity:.65}
+.msg{position:absolute;top:0;right:0;bottom:0;left:0;display:grid;place-items:center;padding:16px;text-align:center;color:var(--mute)}
+.msg a{color:var(--ink);font-weight:600}
+@supports not (aspect-ratio:1){.map-wrap{height:0;padding-top:44.79%}#map{position:absolute;top:0;left:0}}
+.legend{padding-top:14px}
+.lgh{display:flex;justify-content:space-between;align-items:baseline;gap:10px;margin-bottom:8px}
+.lgh em{font-style:normal;color:var(--mute);margin-left:8px;font-size:12.5px}
+.nd{display:flex;align-items:center;gap:6px;color:var(--mute);font-size:12.5px;white-space:nowrap}
+.nd i{width:12px;height:12px;border-radius:3px;background:var(--nodata)}
+.lg{display:grid;grid-template-columns:repeat(6,1fr);gap:3px}
+.lg button{all:unset;display:block;cursor:pointer;text-align:center;transition:opacity .2s}
+.lg button i{display:block;height:13px;border-radius:3px}
+.lg button small{display:block;margin-top:5px;font-size:11.5px;color:var(--mute);font-variant-numeric:tabular-nums}
+.lg button.on small{color:var(--ink);font-weight:700}
+.lg.f button:not(.on){opacity:.4}
+.fade{animation:in .3s ease both}
+@keyframes in{from{opacity:0;transform:translateY(6px)}}
+@keyframes grow{from{transform:scaleX(0)}}
+.kick{font-size:13px;color:var(--mute)}
+.panel h2{font-size:25px;line-height:1.15;margin:2px 0 12px;letter-spacing:-.015em}
+.hero{display:flex;align-items:center;gap:12px}
+.hero i{width:12px;height:46px;border-radius:4px;flex:none}
+.hero b{display:block;font-size:34px;line-height:1;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+.hero small{display:block;margin-top:6px;color:var(--mute);font-size:13px}
+.scale{position:relative;display:grid;grid-template-columns:repeat(6,1fr);gap:2px;margin:20px 0 6px}
+.scale i{height:8px;border-radius:2px}
+.mk{position:absolute;top:-5px;width:4px;height:18px;border-radius:2px;background:var(--sel);box-shadow:0 0 0 2px var(--bg);transform:translateX(-50%);animation:in .5s ease both}
+.scl{display:flex;justify-content:space-between;gap:8px;font-size:12px;color:var(--mute)}
+.sec{margin:22px 0 6px;font-size:13px;font-weight:600;color:var(--mute)}
+.row,.li{all:unset;display:grid;width:100%;box-sizing:border-box;padding:7px 8px;border-radius:7px;cursor:pointer}
+.row{grid-template-columns:1fr auto;gap:5px 10px}
+.row.on{background:var(--chip);box-shadow:inset 3px 0 0 var(--sel)}
+.row b,.li b{font-variant-numeric:tabular-nums;font-weight:600}
+.bar{grid-column:1/-1;height:4px;border-radius:2px;background:var(--line);overflow:hidden}
+.bar span{display:block;height:100%;border-radius:2px;transform-origin:left;animation:grow .55s ease both}
+.li{grid-template-columns:10px 1fr auto;gap:10px;align-items:center}
+.li i{width:10px;height:10px;border-radius:3px}
+.li span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.btns{display:flex;gap:8px;margin-top:18px}
+.btn{all:unset;flex:1;text-align:center;box-sizing:border-box;padding:9px 12px;border-radius:8px;border:1px solid var(--line);cursor:pointer;font-weight:600;font-size:13px}
+.btn.p{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.hint{margin:16px 0 0;font-size:13px}
+.foot{margin:22px 0 0;font-size:12px;color:var(--mute)}
+@media(prefers-reduced-motion:reduce){*{animation-duration:.01ms!important;transition-duration:.01ms!important}}
+</style>
+</head>
+<body>
+<div class="app">
+  <noscript>This map needs JavaScript enabled.</noscript>
+  <h1>World indicators</h1>
+  <p class="sub">Select a country to inspect it. Scroll or pinch to zoom, drag to pan.</p>
+  <nav class="tabs" id="tabs" role="tablist" aria-label="Metric"></nav>
+  <div class="stage">
+    <section>
+      <div class="map-wrap" id="wrap">
+        <svg id="map" viewBox="0 0 960 430" role="img" aria-label="World map colored by the selected metric"></svg>
+        <div class="zoom"><button id="zin" aria-label="Zoom in">+</button><button id="zout" aria-label="Zoom out">−</button><button id="zrst" aria-label="Reset view">⤢</button></div>
+        <div class="tip" id="tip"></div>
+        <div class="msg" id="msg">Loading map…</div>
+      </div>
+      <div class="legend" id="legend"></div>
+    </section>
+    <aside class="panel" id="panel" aria-live="polite"></aside>
+  </div>
+  <p class="foot">Sample data: rounded, approximate figures for illustration. Boundaries from Natural Earth via world-atlas.</p>
+</div>
+<script>
+window.__errs=[];
+addEventListener('error',function(e){window.__errs.push(e.message?e.message+' (line '+e.lineno+')':'failed to load '+(e.target&&(e.target.src||e.target.href)))},true);
+setTimeout(function(){var m=document.getElementById('msg');if(!m)return;
+m.innerHTML='Still loading. Status:<br>d3: '+(window.d3?'ok':'missing')+'<br>topojson: '+(window.topojson?'ok':'missing')+'<br>data: '+(window.WORLD_DATA?'ok':'missing')+'<br>app: '+(window.__wi?'ran':'did not run')+'<br>file end: '+(window.__end?'ok':'cut off')+'<br>errors: '+(window.__errs.slice(0,3).join(' | ')||'none')+'<br><a href="">Reload</a>';},9000);
+</script>
+<script src="https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/topojson-client@3.1.0/dist/topojson-client.min.js"></script>
+<script>
+// Sample data (rounded, approximate, illustrative)
+// ISO3:region,population (m),GDP per capita (US$ k),life expectancy (yrs),internet users (%),CO2 per person (t)
+window.WORLD_DATA=`USA:n,335,81,78,92,14.9
+CAN:n,40,53,82,94,14.2
+MEX:n,128,13,75,76,3.4
+CUB:n,11,9,78,71,2.0
+GTM:n,18,6,75,51,1.1
+DOM:n,11,10,74,85,2.7
+HTI:n,11.7,1.7,64,35,0.3
+HND:n,10,3.3,75,48,1.1
+PAN:n,4.4,18,79,66,2.6
+CRI:n,5.2,17,80,83,1.6
+BRA:s,216,10,75,81,2.2
+ARG:s,46,14,77,87,3.7
+COL:s,52,6.9,77,73,1.7
+PER:s,34,7.5,73,71,1.7
+VEN:s,28,4,72,62,3.4
+CHL:s,19.6,17,80,90,4.4
+ECU:s,18,6.6,74,65,2.4
+BOL:s,12,3.8,69,66,1.7
+PRY:s,6.8,6.1,74,77,1.4
+URY:s,3.4,22,78,90,2.1
+RUS:e,144,14,73,90,11.4
+DEU:e,84,52,81,91,7.7
+FRA:e,68,44,83,91,4.5
+GBR:e,67,49,81,97,4.7
+ITA:e,59,38,83,85,5.2
+ESP:e,48,33,83,94,5.0
+PRT:e,10.4,27,82,85,4.1
+NLD:e,17.6,62,82,95,7.8
+BEL:e,11.7,56,82,93,7.9
+CHE:e,8.8,93,84,96,4.0
+AUT:e,9.1,55,82,93,6.9
+SWE:e,10.5,56,83,95,3.5
+NOR:e,5.5,88,83,99,7.5
+DNK:e,5.9,67,82,98,4.6
+FIN:e,5.5,53,82,94,6.5
+IRL:e,5.2,104,82,94,7.0
+ISL:e,0.4,85,83,99,6.0
+POL:e,37.7,22,77,87,7.6
+CZE:e,10.8,31,79,88,9.2
+HUN:e,9.6,21,76,89,4.7
+ROU:e,19,18,74,86,3.8
+GRC:e,10.4,22,82,83,5.0
+UKR:e,37,5.2,73,79,3.5
+BLR:e,9.2,7.2,74,89,6.2
+BGR:e,6.5,15,75,79,5.7
+SRB:e,6.7,11,76,82,5.8
+HRV:e,3.9,20,78,82,4.0
+SVK:e,5.4,22,77,90,5.8
+LTU:e,2.8,27,76,87,4.5
+LVA:e,1.9,22,76,90,3.7
+EST:e,1.4,29,78,91,7.6
+SVN:e,2.1,31,81,90,5.5
+BIH:e,3.2,8,77,79,5.9
+ALB:e,2.8,8.8,77,83,1.7
+CHN:a,1410,12.6,78,76,8.0
+IND:a,1429,2.5,70,46,2.0
+IDN:a,277,4.9,68,66,2.4
+PAK:a,240,1.4,67,21,1.0
+BGD:a,173,2.5,73,39,0.6
+JPN:a,124,33,84,83,8.1
+PHL:a,117,3.7,69,53,1.3
+VNM:a,99,4.3,74,79,3.6
+TUR:a,85,13,77,83,5.0
+IRN:a,89,4.5,77,79,8.2
+THA:a,72,7.1,77,88,3.7
+MMR:a,54,1.2,67,44,0.6
+KOR:a,52,32,84,97,11.6
+IRQ:a,45,5.7,71,79,4.8
+AFG:a,42,0.4,63,18,0.2
+SAU:a,36,32,78,99,16
+UZB:a,36,2.5,72,77,3.4
+MYS:a,34,12,76,97,8.1
+NPL:a,30,1.4,70,52,0.4
+YEM:a,34,0.5,64,27,0.3
+LKA:a,22,3.8,77,50,1.0
+KAZ:a,20,13,74,92,13
+KHM:a,17,1.8,70,60,0.8
+ARE:a,9.5,50,79,100,20
+ISR:a,9.8,54,83,90,6.5
+JOR:a,11.3,4.5,78,91,2.2
+QAT:a,2.7,85,80,100,33
+KWT:a,4.3,36,79,99,21
+OMN:a,4.6,19,79,96,15
+MNG:a,3.4,5.8,71,83,8.3
+GEO:a,3.7,8.1,74,79,2.9
+AZE:a,10.1,7.2,74,88,3.6
+TWN:a,24,33,80,90,11
+NGA:f,224,1.6,53,45,0.6
+ETH:f,126,1.0,66,17,0.2
+EGY:f,112,3.5,70,72,2.4
+COD:f,102,0.6,61,23,0.1
+TZA:f,67,1.2,66,32,0.2
+ZAF:f,60,6.3,63,72,6.9
+KEN:f,55,2.1,62,40,0.4
+UGA:f,48,1.0,63,27,0.1
+DZA:f,45,5.3,76,71,3.8
+MAR:f,37,3.9,75,90,1.9
+AGO:f,36,2.3,62,39,0.6
+GHA:f,34,2.4,64,69,0.6
+MOZ:f,34,0.6,62,20,0.2
+MDG:f,30,0.5,64,20,0.1
+CMR:f,28,1.7,63,46,0.3
+CIV:f,28,2.6,59,37,0.5
+NER:f,27,0.6,62,17,0.1
+BFA:f,23,0.9,60,22,0.2
+MLI:f,23,0.9,60,36,0.2
+MWI:f,21,0.6,64,15,0.1
+ZMB:f,20,1.4,62,30,0.4
+SEN:f,18,1.7,68,58,0.7
+TCD:f,18,0.7,53,17,0.1
+ZWE:f,16,2.1,61,32,0.7
+GIN:f,14,1.7,59,33,0.2
+TUN:f,12,3.9,74,79,2.6
+LBY:f,6.9,6,72,88,7.2
+NAM:f,2.6,4.7,63,54,1.6
+BWA:f,2.6,7.3,64,74,3.3
+MRT:f,4.9,2.0,65,37,0.7
+AUS:o,26.6,65,83,96,15
+NZL:o,5.2,48,82,96,6.6
+PNG:o,10.3,3.2,65,12,0.8`;
+
+// ISO 3166-1 numeric (as used by world-atlas) to ISO3 alpha codes used above
+window.WORLD_IDS={'004':'AFG','008':'ALB','012':'DZA','024':'AGO','031':'AZE','032':'ARG','036':'AUS','040':'AUT','050':'BGD','056':'BEL','068':'BOL','070':'BIH','072':'BWA','076':'BRA','100':'BGR','104':'MMR','112':'BLR','116':'KHM','120':'CMR','124':'CAN','144':'LKA','148':'TCD','152':'CHL','156':'CHN','158':'TWN','170':'COL','180':'COD','188':'CRI','191':'HRV','192':'CUB','203':'CZE','208':'DNK','214':'DOM','218':'ECU','231':'ETH','233':'EST','246':'FIN','250':'FRA','268':'GEO','276':'DEU','288':'GHA','300':'GRC','320':'GTM','324':'GIN','332':'HTI','340':'HND','348':'HUN','352':'ISL','356':'IND','360':'IDN','364':'IRN','368':'IRQ','372':'IRL','376':'ISR','380':'ITA','384':'CIV','392':'JPN','398':'KAZ','400':'JOR','404':'KEN','410':'KOR','414':'KWT','428':'LVA','434':'LBY','440':'LTU','450':'MDG','454':'MWI','458':'MYS','466':'MLI','478':'MRT','484':'MEX','496':'MNG','504':'MAR','508':'MOZ','512':'OMN','516':'NAM','524':'NPL','528':'NLD','554':'NZL','562':'NER','566':'NGA','578':'NOR','586':'PAK','591':'PAN','598':'PNG','600':'PRY','604':'PER','608':'PHL','616':'POL','620':'PRT','634':'QAT','642':'ROU','643':'RUS','682':'SAU','686':'SEN','688':'SRB','703':'SVK','704':'VNM','705':'SVN','710':'ZAF','716':'ZWE','724':'ESP','752':'SWE','756':'CHE','764':'THA','784':'ARE','788':'TUN','792':'TUR','800':'UGA','804':'UKR','818':'EGY','826':'GBR','834':'TZA','840':'USA','854':'BFA','858':'URY','860':'UZB','862':'VEN','887':'YEM','894':'ZMB'};
+</script>
+<script>
+(function(){
+window.__wi=1;
+const $=s=>document.querySelector(s);
+
+// Visible error reporting: the page must never sit on "Loading map…" silently.
+function fail(why,err){
+  if(err)console.error('[world-indicators] '+why,err);
+  let m=$('#msg');
+  if(!m){m=document.createElement('div');m.id='msg';m.className='msg';$('#wrap').append(m)}
+  m.innerHTML='Couldn’t load the map: '+String(why).replace(/</g,'&lt;')+'.<br><a href="">Reload</a>';
+}
+addEventListener('error',e=>{if($('#msg')&&(/app\.js|data\.js/.test(e.filename||'')||e.filename===location.href.split('#')[0]))fail(e.message||'script error',e.error)});
+addEventListener('unhandledrejection',e=>{if($('#msg'))fail((e.reason&&e.reason.message)||String(e.reason),e.reason)});
+
+const tmo=(p,ms,what)=>Promise.race([p,new Promise((_,no)=>setTimeout(()=>no(new Error(what+' timed out')),ms))]);
+const load=u=>new Promise((ok,no)=>{const s=document.createElement('script');s.src=u;s.onload=ok;s.onerror=()=>no(new Error('could not load '+u));document.head.append(s)});
+async function loadAny(test,urls,label){
+  for(const u of urls){if(test())return;try{await tmo(load(u),10000,u)}catch(e){console.warn('[world-indicators] fallback',e.message)}}
+  if(!test())throw new Error(label+' library unavailable (blocked or offline)');
+}
+// d3 and topojson-client: primary tags are in index.html; these are fallbacks.
+const libs=async()=>{
+  await loadAny(()=>window.d3&&d3.geoNaturalEarth1,['https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js','https://unpkg.com/d3@7.9.0/dist/d3.min.js'],'d3');
+  await loadAny(()=>window.topojson&&topojson.feature,['https://cdnjs.cloudflare.com/ajax/libs/topojson-client/3.1.0/topojson-client.min.js','https://unpkg.com/topojson-client@3.1.0/dist/topojson-client.min.js'],'topojson');
+};
+// World shapes (world-atlas, Natural Earth). A local copy in data/ is preferred if present.
+const SRC=['data/countries-110m.json','https://cdn.jsdelivr.net/npm/world-atlas@2.0.2/countries-110m.json','https://unpkg.com/world-atlas@2.0.2/countries-110m.json'];
+async function getTopo(){
+  for(const u of SRC){
+    try{
+      const c=new AbortController(),t=setTimeout(()=>c.abort(),12000);
+      const r=await fetch(u,{signal:c.signal});clearTimeout(t);
+      if(!r.ok)continue;
+      const j=await r.json();
+      if(j&&j.objects&&j.objects.countries)return j;
+    }catch(e){console.warn('[world-indicators] map data source failed',u,e&&e.message)}
+  }
+  throw new Error('map data unavailable');
+}
+
+async function main(){
+await libs();
+const topo=await getTopo();
+const W=960,H=430;
+const R={n:'North America',s:'South America',e:'Europe',a:'Asia',f:'Africa',o:'Oceania'};
+const NM={USA:'United States',COD:'DR Congo',COG:'Republic of the Congo',TZA:'Tanzania',SRB:'Serbia',MKD:'North Macedonia',SWZ:'Eswatini',BIH:'Bosnia and Herzegovina',CIV:'Côte d’Ivoire',DOM:'Dominican Republic'};
+const tidy=n=>n.replace(/\bDem\./,'Democratic').replace(/\bRep\./,'Republic').replace(/\bEq\./,'Equatorial').replace(/\bIs\./,'Islands').replace(/^S\. /,'South ').replace(/^W\. /,'Western ').replace(/^N\. /,'Northern ').replace(/^Fr\. /,'French ');
+// ISO3:region,population (m),GDP per capita (US$ k),life expectancy (yrs),internet users (%),CO2 per person (t)
+const RAW=window.WORLD_DATA,N2A=window.WORLD_IDS;
+if(!RAW||!N2A)throw new Error('data files (js/data.js) did not load');
+const D=new Map(RAW.split('\n').map(l=>{const[i,v]=l.split(':'),[r,...x]=v.split(',');return[i,{r,pop:+x[0],gdp:+x[1],life:+x[2],net:+x[3],co2:+x[4]}]}));
+const pal=f=>d3.quantize(t=>f(.2+.7*t),6);
+const nf=v=>v>=1000?(v/1000).toFixed(1)+'bn':v>=10?''+Math.round(v):''+ +v.toFixed(1);
+const MT=[
+{k:'life',name:'Life expectancy',unit:'years at birth',c:pal(d3.interpolateYlGn),fmt:v=>Math.round(v)+' yrs'},
+{k:'gdp',name:'GDP per capita',unit:'US$ thousands',c:pal(d3.interpolateBlues),fmt:v=>'$'+nf(v)+'k'},
+{k:'net',name:'Internet users',unit:'% of population',c:pal(d3.interpolatePurples),fmt:v=>Math.round(v)+'%'},
+{k:'co2',name:'CO₂ per person',unit:'tonnes per year',c:pal(d3.interpolateOrRd),fmt:v=>v.toFixed(1)+' t'},
+{k:'pop',name:'Population',unit:'millions',c:pal(d3.interpolateYlOrBr),fmt:v=>nf(v)+(v>=1000?'':' m')}];
+let M=MT[0],mi=0,sel=null,lock=null,bins=[],ranked=[],drag=false,touch=false,tt;
+const S={};
+
+const rev=c=>c.map(r=>r.slice().reverse());
+const feats=topojson.feature(topo,topo.objects.countries).features.filter(f=>String(f.id)!=='010'&&f.geometry).map((f,i)=>{
+  if(d3.geoArea(f)>6.3){const g=f.geometry;g.coordinates=g.type==='Polygon'?rev(g.coordinates):g.coordinates.map(rev)}
+  f._i=i;f.a3=N2A[String(f.id).padStart(3,'0')];f.d=D.get(f.a3);return f});
+const rows=feats.filter(f=>f.d);
+MT.forEach(m=>S[m.k]=rows.map(f=>f.d[m.k]).sort(d3.ascending));
+const rankOf=(k,v)=>S[k].length-d3.bisectRight(S[k],v)+1;
+const name=f=>NM[f.a3]||tidy(f.properties.name||'Unknown');
+
+const svg=d3.select('#map'),tip=$('#tip'),wrap=$('#wrap'),P=$('#panel'),L=$('#legend');
+svg.append('rect').attr('class','ocean').attr('width',W).attr('height',H).on('click',()=>select(null));
+const proj=d3.geoNaturalEarth1().fitExtent([[10,14],[W-10,H-14]],{type:'FeatureCollection',features:feats});
+const path=d3.geoPath(proj),view=svg.append('g');
+const paths=view.append('g').attr('class','cs').selectAll('path').data(feats).join('path').attr('d',path);
+const hov=view.append('path').attr('class','hov'),selP=view.append('path').attr('class','selp');
+$('#msg').remove();
+
+const zoom=d3.zoom().scaleExtent([1,14]).extent([[0,0],[W,H]]).translateExtent([[0,0],[W,H]])
+  .on('start',()=>{drag=true;hideTip();hover(null)})
+  .on('zoom',e=>view.attr('transform',e.transform))
+  .on('end',()=>{drag=false});
+svg.call(zoom);
+const by=k=>svg.transition().duration(300).call(zoom.scaleBy,k);
+$('#zin').onclick=()=>by(1.8);
+$('#zout').onclick=()=>by(1/1.8);
+$('#zrst').onclick=()=>svg.transition().duration(650).call(zoom.transform,d3.zoomIdentity);
+function zoomTo(f){
+  const[[a,b],[c,e]]=path.bounds(f),k=Math.max(1,Math.min(9,.72/Math.max((c-a)/W,(e-b)/H)));
+  const t=zoom.constrain()(d3.zoomIdentity.translate(W/2,H/2).scale(k).translate(-(a+c)/2,-(b+e)/2),[[0,0],[W,H]],[[0,0],[W,H]]);
+  svg.transition().duration(800).ease(d3.easeCubicInOut).call(zoom.transform,t);
+}
+
+const hover=f=>hov.attr('d',f?path(f):null);
+const hideTip=()=>tip.classList.remove('show');
+function showTip(e,f){
+  if(drag||(touch&&e.type!=='click'))return;
+  const d=f.d;
+  tip.innerHTML=`<b>${name(f)}</b>`+(d?`<span><i style="background:${M.c[f._b]}"></i><strong>${M.fmt(d[M.k])}</strong><em>rank ${rankOf(M.k,d[M.k])} of ${S[M.k].length}</em></span>`:'<span>No data</span>');
+  const r=wrap.getBoundingClientRect(),w=tip.offsetWidth,h=tip.offsetHeight;
+  let x=e.clientX-r.left+14,y=e.clientY-r.top+16;
+  if(x+w>r.width-6)x-=w+28;
+  if(y+h>r.height-6)y-=h+32;
+  tip.style.transform=`translate(${Math.max(6,x)}px,${Math.max(6,y)}px)`;
+  tip.classList.add('show');
+}
+addEventListener('pointerdown',e=>{touch=e.pointerType!=='mouse'},true);
+paths.on('pointerenter',(e,f)=>{if(touch||drag)return;hover(f);showTip(e,f)})
+  .on('pointermove',(e,f)=>showTip(e,f))
+  .on('pointerleave',()=>{hover(null);hideTip()})
+  .on('click',(e,f)=>{select(f);if(touch){showTip(e,f);clearTimeout(tt);tt=setTimeout(hideTip,2600)}});
+addEventListener('keydown',e=>{if(e.key==='Escape')select(null)});
+
+function select(f){sel=f;selP.attr('d',f?path(f):null);panel()}
+
+function paint(){paths.style('fill',f=>{const d=f.d;if(!d){f._b=-1;return null}f._b=d3.bisectRight(bins,d[M.k]);return M.c[f._b]})}
+function legend(){
+  const s=S[M.k],e=[s[0],...bins,s[s.length-1]];
+  L.innerHTML=`<div class="lgh"><span><b>${M.name}</b><em>${M.unit}</em></span><span class="nd"><i></i>No data</span></div><div class="lg">${M.c.map((c,i)=>`<button data-i="${i}" aria-label="Highlight ${nf(e[i])} to ${nf(e[i+1])}"><i style="background:${c}"></i><small>${nf(e[i])}–${nf(e[i+1])}</small></button>`).join('')}</div>`;
+}
+function focusBin(i){
+  paths.classed('dim',f=>i!=null&&f._b!==i);
+  L.querySelector('.lg').classList.toggle('f',i!=null);
+  L.querySelectorAll('.lg button').forEach((b,j)=>b.classList.toggle('on',j===i));
+}
+L.onpointerover=e=>{if(e.pointerType==='mouse'){const b=e.target.closest('[data-i]');if(b)focusBin(+b.dataset.i)}};
+L.onpointerleave=()=>focusBin(lock);
+L.onclick=e=>{const b=e.target.closest('[data-i]');if(b){const i=+b.dataset.i;lock=lock===i?null:i;focusBin(lock)}};
+
+function panel(){
+  const btns=`<div class="btns"><button class="btn p" data-a="zoom">Zoom to country</button><button class="btn" data-a="clear">Clear</button></div>`;
+  if(!sel){
+    const s=S[M.k],li=f=>`<button class="li" data-f="${f._i}"><i style="background:${M.c[f._b]}"></i><span>${name(f)}</span><b>${M.fmt(f.d[M.k])}</b></button>`;
+    P.innerHTML=`<div class="fade"><div class="kick">Global overview</div><h2>${M.name}</h2><p class="mute" style="margin:0">Median ${M.fmt(d3.median(s))} across ${s.length} countries in the sample.</p>
+    <div class="sec">Highest</div>${ranked.slice(0,5).map(li).join('')}<div class="sec">Lowest</div>${ranked.slice(-5).reverse().map(li).join('')}
+    <p class="hint mute">Pick a country above or select one on the map for its full profile.</p></div>`;
+    return;
+  }
+  const d=sel.d,nm=name(sel);
+  if(!d){P.innerHTML=`<div class="fade"><div class="kick">No data</div><h2>${nm}</h2><p class="mute">This country isn’t in the sample dataset.</p>${btns}</div>`;return}
+  const v=d[M.k],n=S[M.k].length,r=rankOf(M.k,v),med=d3.median(S[M.k]),pos=(1-(r-1)/(n-1))*100;
+  const list=MT.map((m,j)=>{const x=d[m.k],p=1-(rankOf(m.k,x)-1)/(S[m.k].length-1);
+    return `<button class="row${j===mi?' on':''}" data-m="${j}"><span>${m.name}</span><b>${m.fmt(x)}</b><span class="bar"><span style="width:${Math.max(4,p*100)}%;background:${m.c[4]}"></span></span></button>`}).join('');
+  P.innerHTML=`<div class="fade"><div class="kick">${R[d.r]}</div><h2>${nm}</h2>
+  <div class="hero"><i style="background:${M.c[sel._b]}"></i><div><b>${M.fmt(v)}</b><small>${M.name}, rank ${r} of ${n}</small></div></div>
+  <div class="scale">${M.c.map(c=>`<i style="background:${c}"></i>`).join('')}<span class="mk" style="left:${pos}%"></span></div>
+  <div class="scl"><span>Lowest</span><span>${v>=med?'Above':'Below'} the median of ${M.fmt(med)}</span><span>Highest</span></div>
+  <div class="sec">All indicators</div>${list}${btns}</div>`;
+}
+P.onclick=e=>{
+  const b=e.target.closest('[data-m],[data-f],[data-a]');if(!b)return;const k=b.dataset;
+  if(k.m!=null)setMetric(+k.m);
+  else if(k.f!=null){const f=feats[+k.f];select(f);zoomTo(f)}
+  else if(k.a==='zoom')zoomTo(sel);
+  else select(null);
+};
+
+$('#tabs').innerHTML=MT.map((m,i)=>`<button class="tab" role="tab" data-m="${i}" style="--c:${m.c[4]}">${m.name}</button>`).join('');
+$('#tabs').onclick=e=>{const b=e.target.closest('[data-m]');if(b){setMetric(+b.dataset.m);b.scrollIntoView({inline:'center',block:'nearest',behavior:'smooth'})}};
+
+function setMetric(i){
+  mi=i;M=MT[i];lock=null;
+  bins=d3.scaleQuantile().domain(S[M.k]).range(M.c).quantiles();
+  ranked=rows.slice().sort((a,b)=>b.d[M.k]-a.d[M.k]);
+  paint();legend();focusBin(null);
+  document.querySelectorAll('.tab').forEach((t,j)=>t.setAttribute('aria-selected',j===i));
+  panel();
+}
+requestAnimationFrame(()=>requestAnimationFrame(()=>setMetric(0)));
+}
+main().catch(e=>fail((e&&e.message)||'unexpected error',e));
+})();
+</script>
+<script>window.__end=1</script>
+</body>
+</html>
